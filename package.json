@@ -1,0 +1,25 @@
+{
+  "name": "poe-reciper",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moriakaice/poe-reciper.git"
+  },
+  "author": "Mori <moriakaice@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^0.22.0",
+    "dotenv": "^10.0.0"
+  },
+  "description": "This project aims at creating an easy forkable software that, powered by Github Actions, could bring you the vendor recipes from Path Of Exile that your character could use.",
+  "bugs": {
+    "url": "https://github.com/moriakaice/poe-reciper/issues"
+  },
+  "homepage": "https://github.com/moriakaice/poe-reciper#readme",
+  "devDependencies": {},
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": []
+}
