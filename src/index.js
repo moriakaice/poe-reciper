@@ -89,6 +89,102 @@ const get = async (url) => {
   }
 }
 
+const recipes = {
+  // https://www.poewiki.net/wiki/Glassblower%27s_Bauble#Obtaining
+  glassblowersBauble: (charactersInventory, tabs) => {
+    const flaskFilter = (item) =>
+      item.typeLine && item.typeLine.includes('Flask') && item.properties && item.properties.find((property) => property.name === 'Quality')
+
+    const formatFlask = (flask) => {
+      if (flask.inventoryId === 'MainInventory') {
+        return {
+          typeLine: flask.typeLine,
+          tabIndex: 'Inventory',
+          tabName: flask.characterName,
+          search: `+${flask.quality}%`,
+        }
+      }
+
+      return {
+        typeLine: flask.typeLine,
+        tabIndex: flask.tabIndex,
+        tabName: flask.tabName,
+        search: `+${flask.quality}%`,
+      }
+    }
+
+    const getSmallestFlaskQuality = (flasks) => {
+      return flasks[flasks.length - 1].quality
+    }
+
+    const getFlaskQualitySum = (flasks) => flasks.reduce((acc, curr) => acc + curr.quality, 0)
+
+    const checkRestOfFlasks = (flasks, flasksUsed) => {
+      if (!flasks.length) {
+        return false
+      }
+
+      const currentQualitySum = getFlaskQualitySum(flasksUsed)
+
+      const smallestFlaskQuality = getSmallestFlaskQuality(flasks)
+      if (currentQualitySum + flasks[0].quality === 40) {
+        return flasksUsed.concat(flasks[0])
+      } else {
+        if (currentQualitySum + flasks[0].quality + smallestFlaskQuality <= 40) {
+          return checkRestOfFlasks(flasks.slice(1), flasksUsed.concat([flasks[0]]))
+        }
+
+        flasksUsed.pop()
+        return checkRestOfFlasks(flasks.slice(1), flasksUsed.concat([flasks[0]]))
+      }
+    }
+
+    let flasks = []
+
+    Object.keys(charactersInventory).forEach((character) => (flasks = flasks.concat(charactersInventory[character].filter(flaskFilter))))
+    Object.keys(tabs).forEach((tabIndex) => (flasks = flasks.concat(tabs[tabIndex].filter(flaskFilter))))
+
+    flasks = flasks.map((flask) => ({
+      ...flask,
+      quality: parseInt(flask.properties.find((property) => property.name === 'Quality').values[0][0].replace(/^[0-9]/, ''), 10),
+    }))
+
+    const baublers = []
+    let run = flasks.length
+
+    while (run) {
+      const currentFlask = flasks.shift()
+      const flasksUsed = [currentFlask]
+
+      if (currentFlask.quality === 20 && flask.frameType === 0) {
+        baublers.push([formatFlask(currentFlask)])
+      } else {
+        const baubleFlasks = checkRestOfFlasks(flasks, flasksUsed)
+
+        if (baubleFlasks && getFlaskQualitySum(baubleFlasks) === 40) {
+          baublers.push(baubleFlasks.map(formatFlask))
+          baubleFlasks.forEach((flask) => {
+            const index = flasks.indexOf(flask)
+
+            if (index > -1) {
+              flasks.splice(index, 1)
+            }
+          })
+        }
+      }
+
+      run = flasks.length
+    }
+
+    if (baublers.length) {
+      console.log(`Found items to convert to Glassblower's Bauble recipe`)
+      console.log(JSON.stringify(baublers, null, 2))
+    } else {
+      console.warn(`Nothing found for Glassblower's Bauble recipe`)
+    }
+  },
+}
+
 const getCharacters = async () => {
   const url = `/character-window/get-characters?accountName=${settings.accountName}`
 
@@ -98,7 +194,7 @@ const getCharacters = async () => {
 const getCharacterInventory = async (characterName) => {
   const url = `/character-window/get-items?character=${encodeURIComponent(characterName)}`
 
-  return await get(url)
+  return (await get(url)).items
 }
 
 const getTabsList = async () => {
@@ -122,15 +218,22 @@ const main = async () => {
     const characterName = characters[i].name
 
     const characterInventory = await getCharacterInventory(characterName)
-    charactersInventory[characterName] = characterInventory.items.filter((item) => item.inventoryId === 'MainInventory')
+    charactersInventory[characterName] = characterInventory.filter((item) => item.inventoryId === 'MainInventory').map((item) => ({ ...item, characterName }))
   }
 
   const tabsList = await getTabsList()
 
   for (let i = 0; i < tabsList.length; i++) {
     const tabIndex = tabsList[i].i
-    tabs[i] = await getTabItems(tabIndex)
+    tabs[i] = (await getTabItems(tabIndex)).map((item) => ({ ...item, tabIndex, tabName: tabsList[i].n }))
   }
+
+  Object.keys(settings.recipes)
+    .filter((recipe) => settings.recipes[recipe])
+    .filter((recipe) => recipes[recipe])
+    .forEach((recipe) => {
+      recipes[recipe](charactersInventory, tabs)
+    })
 }
 
 main().then()
