@@ -20,6 +20,8 @@ if (!settings.accountName || !settings.poeSessId) {
   )
 }
 
+const sleep = async (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 const cache = {
   get: (url) => {
     const filename = `${__dirname}/../cache/${crypto.createHash('md5').update(url).digest('hex')}.json`
@@ -58,7 +60,7 @@ const Axios = () => {
     axiosInstance = axios.create({
       baseURL: 'https://www.pathofexile.com',
       timeout: 1000,
-      headers: { 'User-Agent': `poe-reciper/${process.env.npm_package_version}` },
+      headers: { 'User-Agent': `poe-reciper/${process.env.npm_package_version}`, cookie: 'POESESSID=' + settings.poeSessId },
     })
   }
 
@@ -72,27 +74,63 @@ const get = async (url) => {
     return cachedData
   }
 
+  await sleep(100)
+
   const { status, data } = await Axios().get(url)
 
-  if (status === 200) {
+  if (status === 200 && !data.error) {
     cache.set(url, data)
     return data
   } else {
-    console.error(`[get] Error while trying to obtain ${url}`)
-    throw new Error(`[get] Error while trying to obtain ${url}`)
+    const errorMessage = (data && data.error && data.error.message && data.error.message) || ''
+
+    console.error(`[get] Error while trying to obtain ${url}. ${errorMessage}`)
+    throw new Error(`[get] Error while trying to obtain ${url}. ${errorMessage}`)
   }
 }
 
 const getCharacters = async () => {
   const url = `/character-window/get-characters?accountName=${settings.accountName}`
 
+  return (await get(url)).filter((character) => character.league === settings.league)
+}
+
+const getCharacterInventory = async (characterName) => {
+  const url = `/character-window/get-items?character=${encodeURIComponent(characterName)}`
+
   return await get(url)
+}
+
+const getTabsList = async () => {
+  const url = `/character-window/get-stash-items?accountName=${settings.accountName}&realm=${settings.realm}&league=${settings.league}&tabs=1&tabIndex=0`
+
+  return (await get(url)).tabs
+}
+
+const getTabItems = async (tabIndex) => {
+  const url = `/character-window/get-stash-items?accountName=${settings.accountName}&realm=${settings.realm}&league=${settings.league}&tabs=0&tabIndex=${tabIndex}`
+
+  return (await get(url)).items
 }
 
 const main = async () => {
   const characters = await getCharacters()
+  const charactersInventory = {}
+  const tabs = {}
 
-  console.log(characters)
+  for (let i = 0; i < characters.length; i++) {
+    const characterName = characters[i].name
+
+    const characterInventory = await getCharacterInventory(characterName)
+    charactersInventory[characterName] = characterInventory.items.filter((item) => item.inventoryId === 'MainInventory')
+  }
+
+  const tabsList = await getTabsList()
+
+  for (let i = 0; i < tabsList.length; i++) {
+    const tabIndex = tabsList[i].i
+    tabs[i] = await getTabItems(tabIndex)
+  }
 }
 
 main().then()
